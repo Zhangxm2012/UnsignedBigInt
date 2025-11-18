@@ -1,15 +1,17 @@
 #include<bits/stdc++.h>
+#define debug cout<<"Here"
 #define QWQ "QwQ,Cannot handle negative numbers."
 #define ll long long
 #define ull unsigned long long
 #define Exit(str,val) {cout<<str;exit(val);}
 #define Re_val 3221225477
-#define LENGTH 700000
+#define LENGTH 600000
 #define MLE "Memory Limit Exceeded"
 #define lf double
 #define llf long double
 using namespace std;
-const lf pi=acos(-1);
+const lf pi=3.141592653589793;
+const lf pi2=6.283185307179586;
 template<typename T>
 struct Complex{
 	T rez,imz;
@@ -20,28 +22,29 @@ struct Complex{
 	Complex operator*(const Complex&b)const{return {rez*b.rez-imz*b.imz,rez*b.imz+imz*b.rez};}
 	void operator/=(const int&b){rez/=b,imz/=b;}
 	void operator*=(const Complex&b){*this=*this*b;}
+	Complex conj(){return {rez,-imz};}
 };
-ull Max;
 template<typename T>
 struct FFT{
 	vector<Complex<T>>fft_a;
 	void init(int len){fft_a.resize(len);}
-	int rev[LENGTH];
+	int rev[LENGTH];vector<Complex<lf>>omega;
 	void fft(int flag,int len){
 		for(int i=0;i<len;i++){
-//			cout<<i<<':'<<rev[i]<<'\n';
 			if(i<rev[i]) swap(fft_a[i],fft_a[rev[i]]);
 		}
-		for(int i=1;i<len;i<<=1){
-			Complex<T> w_n={cos(flag*pi/i),sin(flag*pi/i)};
-			for(int j=0;j<len;j+=(i<<1)){
-				Complex<T>w={1,0};
-				for(int k=j;k<j+i;k++){
-					Complex<T>x=fft_a[k];
-					Complex<T>y=w*fft_a[i+k];
-					fft_a[k]=x+y;
-					fft_a[i+k]=x-y;
-					w*=w_n;
+		for(int i=2;i<=len;i<<=1){
+			int t=len/i;
+			for(int j=0;j<len;j+=i){
+				for(int k=0;k<i/2;k++){
+					int idx=k*t;
+					if(flag<0) idx=len-idx;
+					if(idx>=len) idx-=len;
+					Complex<T>w=omega[idx];
+					Complex<T>x=fft_a[j+k];
+					Complex<T>y=w*fft_a[j+k+i/2];
+					fft_a[j+k]=x+y;
+					fft_a[j+k+i/2]=x-y;
 				}
 			}
 		}
@@ -50,7 +53,11 @@ struct FFT{
 	void Init(int k){
 		memset(rev,0,sizeof rev);
 		int l=1<<k;
-		for(int i=0;i<l;i++) rev[i]=(rev[i>>1]>>1)|((i&1)<<(k-1));//cout<<i<<':'<<rev[i]<<'\n';
+		for(int i=0;i<l;i++) rev[i]=(rev[i>>1]>>1)|((i&1)<<(k-1));
+		omega.clear(),omega.resize(l);
+		omega[0]={1.0,0.0};
+		for(int i=1;i<l;i<<=1) omega[i]={cos(pi2*i/l),sin(pi2*i/l)};
+		for(int i=0;i<l;i++) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
 	}
 };
 class UnsignedBigInt{
@@ -95,7 +102,7 @@ public:
 		out<<x.num[x.len-1];
 		for(int i=x.len-2;i>=0;i--){
 			char buf[10];
-			sprintf(buf,"%08lld",x.num[i]);
+			sprintf(buf,"%08llu",x.num[i]);
 			out<<buf;
 		}
 		return out;
@@ -131,23 +138,11 @@ public:
 	}
 	ull operator[](const int&b)const{return num[b];}
 	ull at(const int&b)const{if(b>=LENGTH) Exit("RE",Re_val);return num[b];}
-	UnsignedBigInt operator-()const{UnsignedBigInt c;return c;}
 	UnsignedBigInt operator+(const UnsignedBigInt&b)const{
-		UnsignedBigInt c;
-		int n=max(len,b.len)+1;c.len=n;
-		for(int i=0;i<n;i++) c.num[i]+=num[i]+b.num[i];
-		for(int i=0;i<n;i++){
-			if(c.num[i]>=BASE){
-				c.num[i+1]+=c.num[i]/BASE;c.num[i]%=BASE;
-			}
-		}
-		for(int i=n-1;i>=1;i--){
-			if(c.num[i]==0) c.len--;
-			else break;
-		}
+		UnsignedBigInt c(*this);c+=b;
 		return c;
 	}
-	void operator+=(const UnsignedBigInt&b){
+	UnsignedBigInt operator+=(const UnsignedBigInt&b){
 		int n=max(len,b.len)+1;len=n;
 		for(int i=0;i<n;i++) num[i]+=b.num[i];
 		for(int i=0;i<n;i++){
@@ -159,12 +154,13 @@ public:
 			if(num[i]==0) len--;
 			else break;
 		}
+		return *this;
 	}
 	UnsignedBigInt operator-(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);
 		c-=b;return c;
 	}
-	void operator-=(const UnsignedBigInt&b){
+	UnsignedBigInt operator-=(const UnsignedBigInt&b){
 		if(*this<b) Exit(QWQ,Re_val);
 		ull t=0;
 		for(int i=0;i<len;i++){
@@ -174,6 +170,7 @@ public:
 			if(t==0&&i>=b.len) break;
 		}
 		while(len>1&&num[len-1]==0) len--;
+		return *this;
 	}
 	UnsignedBigInt operator*(const UnsignedBigInt&b)const{
 		int k=1,Len=2,n=len,m=b.len;
@@ -201,18 +198,36 @@ public:
 		while(c.len>1&&!c.num[c.len-1]) c.len--;
 		return c;
 	}
+	UnsignedBigInt operator*=(const UnsignedBigInt&b){
+		int k=1,Len=2,n=len,m=b.len;
+		while((1<<k)<n+m) k++,Len<<=1;
+		Len<<=1,k++;
+		FFT<lf>FFT_a,FFT_b;FFT_a.init(Len+1),FFT_b.init(Len+1);
+		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1].rez=(lf)(num[i]%FFT_BASE),FFT_a.fft_a[i<<1|1].rez=(lf)(num[i]/FFT_BASE);
+		for(int i=0;i<b.len;i++) FFT_b.fft_a[i<<1].rez=(lf)(b.num[i]%FFT_BASE),FFT_b.fft_a[i<<1|1].rez=(lf)(b.num[i]/FFT_BASE);
+		if(Len>LENGTH) Exit(MLE,Re_val);
+		FFT_a.Init(k),FFT_b.Init(k);
+		FFT_a.fft(1,Len);
+		FFT_b.fft(1,Len);
+		for(int i=0;i<Len;i++) FFT_a.fft_a[i]*=FFT_b.fft_a[i];
+		FFT_a.fft(-1,Len);
+		memset(num,0,sizeof num);
+		for(int i=0;i<Len;i+=2){
+			int idx=i>>1;
+			__uint128_t t=(ull)(FFT_a.fft_a[i|1].rez+0.5)*FFT_BASE+(ull)(FFT_a.fft_a[i].rez+0.5);
+			num[idx]+=t%BASE;
+			num[idx+1]+=num[idx]/BASE;
+			num[idx]%=BASE;
+			num[idx+1]+=t/BASE;
+		}
+		len=(Len>>1)+1;
+		while(len>1&&!num[len-1]) len--;
+		return *this;
+	}
 }a,b;
 int main(){
-//	freopen("P1919_1(1).in","r",stdin);
-//	freopen("P1919_1(1).ans","w",stdout);
 	cin>>a>>b;
-	a=a*b;
-	cout<<a<<'\n';
-	cout<<Max;
+//	debug;
 	return 0;
 }
-/*
-99999999
-99999999
-*/
 
