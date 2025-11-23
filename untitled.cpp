@@ -12,6 +12,52 @@
 using namespace std;
 const lf pi=3.141592653589793;
 const lf pi2=6.283185307179586;
+namespace IO{
+	static constexpr int BUFSIZE=1<<20;
+	char ibuf[BUFSIZE],*is=ibuf,*it=ibuf,obuf[BUFSIZE];int cnt=0;
+	inline void flush(){
+		fwrite(obuf,1,cnt,stdout),cnt=0;
+		return;
+	}
+	inline char get(){
+		if(is==it) it=(is=ibuf)+fread(ibuf,1,BUFSIZE,stdin);
+		return is==it? EOF:*is++;
+	}
+	inline void put(char c){
+		obuf[cnt++]=c;
+		if(cnt==BUFSIZE) flush();
+		return;
+	}
+	struct AutoFlush{~AutoFlush(){flush();}}flusher;
+	inline int read(){
+		char c=get();int x=0,neg=0;
+		while(!isdigit(c)){
+			if(c=='-') neg^=1;
+			c=get();
+		}
+		do x=(x<<1)+(x<<3)+(c&15); while(isdigit(c=get()));
+		return neg? -x:x;
+	}
+	inline void c_write(const char*s,const char&c='\0'){
+		while(*s) put(*s++);
+		if(c) put(c);
+	}
+	inline void s_write(const string&s,const char&c='\0'){
+		for(char cc:s) put(cc);
+		if(c) put(c);
+	}
+	template<typename Tp>
+	inline void write(Tp x,const char& c='\0'){
+		if constexpr(is_integral_v<Tp>||is_floating_point_v<Tp>){
+			if(x<0) put('-'),x=-x;
+			static int top=0,wr[50];
+			do wr[++top]=x%10; while(x/=10);
+			while(top) put(wr[top--]|48);
+			if(c) put(c);
+			return;
+		}
+	}
+}
 template<typename T>
 struct Complex{
 	T rez,imz;
@@ -93,6 +139,23 @@ public:
 		memset(num,0,sizeof num);
 		len=1;
 	}
+	void fread(){
+		string s;
+		char c=IO::get();
+		while(!isgraph(c)) c=IO::get();
+		while(isgraph(c)&&c!=EOF) s+=c,c=IO::get();
+		*this=UnsignedBigInt(s);
+	}
+	void fwrite(){
+		IO::write(num[len-1]);
+		for(int i=len-2;i>=0;i--){
+			char buf[10];
+			sprintf(buf,"%08llu",num[i]);
+			IO::s_write(buf);
+		}
+		IO::put('\n');
+		IO::flush();
+	}
 	friend istream& operator>>(istream&in,UnsignedBigInt&x){
 		string s;in>>s;
 		if(in) x=UnsignedBigInt(s);
@@ -173,29 +236,7 @@ public:
 		return *this;
 	}
 	UnsignedBigInt operator*(const UnsignedBigInt&b)const{
-		int k=1,Len=2,n=len,m=b.len;
-		while((1<<k)<n+m) k++,Len<<=1;
-		Len<<=1,k++;
-		FFT<lf>FFT_a,FFT_b;FFT_a.init(Len+1),FFT_b.init(Len+1);
-		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1].rez=(lf)(num[i]%FFT_BASE),FFT_a.fft_a[i<<1|1].rez=(lf)(num[i]/FFT_BASE);
-		for(int i=0;i<b.len;i++) FFT_b.fft_a[i<<1].rez=(lf)(b.num[i]%FFT_BASE),FFT_b.fft_a[i<<1|1].rez=(lf)(b.num[i]/FFT_BASE);
-		if(Len>LENGTH) Exit(MLE,Re_val);
-		FFT_a.Init(k),FFT_b.Init(k);
-		FFT_a.fft(1,Len);
-		FFT_b.fft(1,Len);
-		for(int i=0;i<Len;i++) FFT_a.fft_a[i]*=FFT_b.fft_a[i];
-		FFT_a.fft(-1,Len);
-		UnsignedBigInt c;
-		for(int i=0;i<Len;i+=2){
-			int idx=i>>1;
-			__uint128_t t=(ull)(FFT_a.fft_a[i|1].rez+0.5)*FFT_BASE+(ull)(FFT_a.fft_a[i].rez+0.5);
-			c.num[idx]+=t%BASE;
-			c.num[idx+1]+=c.num[idx]/BASE;
-			c.num[idx]%=BASE;
-			c.num[idx+1]+=t/BASE;
-		}
-		c.len=(Len>>1)+1;
-		while(c.len>1&&!c.num[c.len-1]) c.len--;
+		UnsignedBigInt c(*this);c*=b;
 		return c;
 	}
 	UnsignedBigInt operator*=(const UnsignedBigInt&b){
@@ -211,7 +252,7 @@ public:
 		FFT_b.fft(1,Len);
 		for(int i=0;i<Len;i++) FFT_a.fft_a[i]*=FFT_b.fft_a[i];
 		FFT_a.fft(-1,Len);
-		memset(num,0,sizeof num);
+		memset(num,0,sizeof(int)*(Len));
 		for(int i=0;i<Len;i+=2){
 			int idx=i>>1;
 			__uint128_t t=(ull)(FFT_a.fft_a[i|1].rez+0.5)*FFT_BASE+(ull)(FFT_a.fft_a[i].rez+0.5);
@@ -224,10 +265,20 @@ public:
 		while(len>1&&!num[len-1]) len--;
 		return *this;
 	}
-}a,b;
+	UnsignedBigInt pow(int p)const{
+		UnsignedBigInt res("1"),a(*this);
+		for(;p;p>>=1){
+			if(p&1) res*=a;
+			if(p) a*=a;
+		}
+		return res*a;
+	}
+}a;
 int main(){
-	cin>>a>>b;
-//	debug;
+//	freopen("copycat.in","r",stdin);
+//	freopen("copycat.out","w",stdout);
+	int T;cin>>T;
+	while(T--) a.fread(),a.fwrite();
 	return 0;
 }
 
