@@ -5,7 +5,7 @@
 #define ull unsigned long long
 #define Exit(str,val) {cout<<str;exit(val);}
 #define Re_val 3221225477
-#define LENGTH 3000000
+#define LENGTH 20000
 #define MLE "Memory Limit Exceeded"
 #define lf double
 #define llf long double
@@ -48,14 +48,12 @@ namespace IO{
 	}
 	template<typename Tp>
 	inline void write(Tp x,const char& c='\0'){
-		if constexpr(is_integral_v<Tp>||is_floating_point_v<Tp>){
-			if(x<0) put('-'),x=-x;
-			static int top=0,wr[50];
-			do wr[++top]=x%10; while(x/=10);
-			while(top) put(wr[top--]|48);
-			if(c) put(c);
-			return;
-		}
+		if(x<0) put('-'),x=-x;
+		static int top=0,wr[50];
+		do wr[++top]=x%10; while(x/=10);
+		while(top) put(wr[top--]|48);
+		if(c) put(c);
+		return;
 	}
 }
 template<typename T>
@@ -108,7 +106,7 @@ struct FFT{
 };
 class UnsignedBigInt{
 private:
-	static const int LEN=8,BASE=100000000,FFT_BASE=10000;
+	static const int LEN=8,BASE=100000000,FFT_BASE=10000,T=255;
 	ull num[LENGTH];int len;
 	int Pow(int a,int p){
 		int res=1;
@@ -121,9 +119,10 @@ public:
 		len=1;
 	}
 	UnsignedBigInt(const string&s){
+		if(s[0]=='-') Exit(QWQ,Re_val);
+		for(int i=0;i<(int)s.size();i++){if(!isdigit(s[i])) Exit("Not a valid numeric string",Re_val);}
 		init();
 		int st=0;
-		if(s[0]=='-') Exit(QWQ,Re_val);
 		len=(s.size()-st+LEN-1)/LEN;
 		for(int i=s.size()-1,j=0;i>=st;i--,j++){
 			num[j/LEN]+=(s[i]-'0')*Pow(10,j%LEN);
@@ -134,6 +133,11 @@ public:
 		memset(num,0,sizeof num);
 		memcpy(num,b.num,b.len*sizeof(ull));
 		len=b.len;
+	}
+	UnsignedBigInt(const ull&b){
+		memset(num,0,sizeof num);len=0;
+		ull x=b;do{num[len]=x%BASE,len++;}while(x/=BASE);
+		while(len>1&&!num[len-1]) len--;
 	}
 	void init(){
 		memset(num,0,sizeof num);
@@ -235,11 +239,25 @@ public:
 		while(len>1&&num[len-1]==0) len--;
 		return *this;
 	}
+	void Mul(const UnsignedBigInt&b){
+		ull* temp=new ull[len+b.len+5]();
+		for(int i=0;i<len;i++){
+			ull carry=0,t=num[i];
+			for(int j=0;j<b.len;j++){carry+=temp[i+j]+t*b.num[j];temp[i+j]=carry%BASE,carry/=BASE;}
+			temp[i+b.len]+=carry;
+		}
+		memset(num,0,sizeof(ull)*(len));len=len+b.len+5;
+		for(int i=0;i<len;i++) num[i]=temp[i];
+		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
+		while(len>1&&num[len-1]==0) len--;
+		delete[] temp;
+	}
 	UnsignedBigInt operator*(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);c*=b;
 		return c;
 	}
 	UnsignedBigInt operator*=(const UnsignedBigInt&b){
+		if(len<=T||b.len<=T){Mul(b);return *this;}
 		int k=1,Len=2,n=len,m=b.len;
 		while((1<<k)<n+m) k++,Len<<=1;
 		Len<<=1,k++;
@@ -265,7 +283,36 @@ public:
 		while(len>1&&!num[len-1]) len--;
 		return *this;
 	}
+	UnsignedBigInt operator*=(const ull&b){
+		if(b<=184467438892){
+			len+=3;
+			for(int i=0;i<len;i++){num[i]*=b;}
+			for(int i=0;i<len;i++){num[i+1]+=num[i]/BASE,num[i]%=BASE;}
+			while(len>1&&!num[len-1]) len--;
+		}
+		else Mul(UnsignedBigInt(b));
+		return *this;
+	}
+	UnsignedBigInt operator*(const ull&b){
+		UnsignedBigInt c(*this);c*=b;
+		return c;
+	}
+	UnsignedBigInt operator/=(const ull&b){
+		if(b==0) Exit("Error:Division by zero!",Re_val);
+		ull d=0;
+		for(int i=len-1;i>=0;i--){
+			d=d*BASE+num[i];num[i]=d/b;d%=b;
+		}
+		while(len>1&&!num[len-1]) len--;
+		return *this;
+	}
+	UnsignedBigInt operator/(const ull&b)const{
+		UnsignedBigInt c(*this);c/=b;
+		return c;
+	}
 	UnsignedBigInt pow(int p)const{
+		if(p==0) return UnsignedBigInt("1");
+		if(p==1) return *this;
 		UnsignedBigInt res("1"),a(*this);
 		for(;p;p>>=1){
 			if(p&1) res*=a;
@@ -273,4 +320,17 @@ public:
 		}
 		return res;
 	}
-};
+	static UnsignedBigInt fact(int st,int n){
+		if(n<=16){
+			UnsignedBigInt res=1;
+			for(int i=st;i<st+n;i++) res*=i;
+			return res;
+		}
+		int mid=(n+1)/2;
+		return fact(st,mid)*fact(st+mid,n-mid);
+	}
+}a;ull b;
+int main(){
+	while(cin>>b) cout<<a.fact(1,b)<<'\n';
+	return 0;
+}
