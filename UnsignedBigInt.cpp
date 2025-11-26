@@ -329,8 +329,34 @@ public:
 		int mid=(n+1)/2;
 		return fact(st,mid)*fact(st+mid,n-mid);
 	}
-}a;ull b;
+	int Two(){
+		if(num[0]%2){return 0;}
+		*this/=2;
+		return Two()+1;
+	}
+	int Cmp(const UnsignedBigInt&b){
+		if(len!=b.len) return len>b.len?1:-1;
+		for(int i=len-1;i>=0;i--){
+			if(num[i]!=b.num[i]) return num[i]>b.num[i]?1:-1;
+		}
+		return 0;
+	}
+	UnsignedBigInt gcd(const UnsignedBigInt&b)const{
+		UnsignedBigInt c(*this),d(b);
+		int p=min(c.Two(),d.Two());
+		while(true){
+			int res=c.Cmp(d);
+			if(res>0) c-=d,c.Two();
+			else if(res<0) d-=c,d.Two();
+			else break;
+		}
+		for(int i=1;i<=p;i++) c*=2;
+		return c;
+	}
+};
 int main(){
-	while(cin>>b) cout<<a.fact(1,b)<<'\n';
+	UnsignedBigInt a,b;
+	cin>>a>>b;
+	cout<<a.gcd(b);
 	return 0;
 }
