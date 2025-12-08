@@ -5,15 +5,13 @@
 #define ull unsigned long long
 #define Exit(str,val) {cout<<str;exit(val);}
 #define Re_val 3221225477
-#define LENGTH 20000
+#define LENGTH 4000
 #define MLE "Memory Limit Exceeded"
 #define lf double
 #define llf long double
 using namespace std;
-const lf pi=3.141592653589793;
-const lf pi2=6.283185307179586;
 namespace IO{
-	static constexpr int BUFSIZE=1<<20;
+	static const int BUFSIZE=1<<20;
 	char ibuf[BUFSIZE],*is=ibuf,*it=ibuf,obuf[BUFSIZE];int cnt=0;
 	inline void flush(){
 		fwrite(obuf,1,cnt,stdout),cnt=0;
@@ -70,9 +68,11 @@ struct Complex{
 };
 template<typename T>
 struct FFT{
+	const lf pi=3.141592653589793;
+	const lf pi2=6.283185307179586;
 	vector<Complex<T>>fft_a;
 	void init(int len){fft_a.resize(len);}
-	int rev[LENGTH];vector<Complex<lf>>omega;
+	vector<int>rev;vector<Complex<lf>>omega;
 	void fft(int flag,int len){
 		for(int i=0;i<len;i++){
 			if(i<rev[i]) swap(fft_a[i],fft_a[rev[i]]);
@@ -95,7 +95,7 @@ struct FFT{
 		if(flag==-1) for(int i=0;i<len;i++) fft_a[i]/=len;
 	}
 	void Init(int k){
-		memset(rev,0,sizeof rev);
+		rev.resize(1<<k,0);
 		int l=1<<k;
 		for(int i=0;i<l;i++) rev[i]=(rev[i>>1]>>1)|((i&1)<<(k-1));
 		omega.clear(),omega.resize(l);
@@ -160,6 +160,92 @@ public:
 		IO::put(c);
 		IO::flush();
 	}
+	int Two(){
+		if(num[0]%2){return 0;}
+		*this/=2;
+		return Two()+1;
+	}
+	int Cmp(const UnsignedBigInt&b){
+		if(len!=b.len) return len>b.len?1:-1;
+		for(int i=len-1;i>=0;i--){
+			if(num[i]!=b.num[i]) return num[i]>b.num[i]?1:-1;
+		}
+		return 0;
+	}
+	void Mul(const UnsignedBigInt&b){
+		ull* temp=new ull[len+b.len+5]();
+		for(int i=0;i<len;i++){
+			ull carry=0,t=num[i];
+			for(int j=0;j<b.len;j++){carry+=temp[i+j]+t*b.num[j];temp[i+j]=carry%BASE,carry/=BASE;}
+			temp[i+b.len]+=carry;
+		}
+		memset(num,0,sizeof(ull)*(len));len=len+b.len+5;
+		for(int i=0;i<len;i++) num[i]=temp[i];
+		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
+		while(len>1&&num[len-1]==0) len--;
+		delete[] temp;
+	}
+	UnsignedBigInt Left(int cnt)const{
+		if(cnt<=0) Exit("Left Shift count is negative!",Re_val);
+		if(len+cnt>LENGTH) Exit("Left Shift:Memory Limit Exceeded",Re_val);
+		UnsignedBigInt res;
+		memmove(res.num+cnt,num,len*sizeof(ull)),memset(res.num,0,cnt*sizeof(ull));
+		res.len=len+cnt;return res;
+	}
+	UnsignedBigInt Right(int cnt)const{
+		if(cnt<=0) Exit("Right Shift count is negative!",Re_val);
+		if(cnt>=len) return UnsignedBigInt();
+		UnsignedBigInt res;
+		memmove(res.num,num+cnt,(len-cnt)*sizeof(ull));
+		memset(res.num+(len-cnt),0,cnt*sizeof(ull));
+		res.len=len-cnt;
+		while(res.len>1&&res.num[res.len-1]==0) res.len--;
+		return res;
+	}
+	UnsignedBigInt Inv(int n)const{
+		if(*this==0) Exit("Error:Division by zero!",Re_val);
+		if(min(len,n-len)<=16){
+			UnsignedBigInt a;a.len=n+1;a.num[len]=1;
+		}
+	}
+	bool Cmp_eq(const UnsignedBigInt&a,const UnsignedBigInt&b,int last)const{
+		if(last+b.len>a.len) return 0;
+		if(a.num[last+b.len]!=0) return 1;
+		for(int i=b.len-1;i>=0;i--){
+			if(a.num[last+i]!=b.num[i]){return a.num[last+i]>b.num[i];}
+		}
+		return 1;
+	}
+	ull Get(const UnsignedBigInt&a,int pos)const{
+		return 10ull*BASE*(pos+1>=a.len?0:a.num[pos+1])+10ull*a.num[pos]+(pos?a.num[pos-1]:0)/(BASE/10);
+	}
+	pair<UnsignedBigInt,UnsignedBigInt> Simple_Mod(const UnsignedBigInt&b)const{
+		if(b==0) Exit("Error:Division by zero!",Re_val);
+		if(*this<b) return make_pair(0,*this);
+		if(*this==b) return make_pair(1,0);
+		if(b.len<=2){ull q=b.num[0]+b.num[1]*BASE;return make_pair(*this/q,*this%q);}
+		UnsignedBigInt Q,R(*this);Q.len=len-b.len+1;
+		for(int i=len-b.len;i>=0;i--){
+			ull q=0;
+			auto Sub=[&](){
+				ll t=0;
+				for(int j=0;j<b.len;j++){
+					t=t-q*b.num[j]+R.num[i+j];
+					R.num[i+j]=(ull)(t%BASE),t/=BASE;
+					if(R.num[i+j]>=BASE) R.num[i+j]+=BASE,t--;
+				}
+				if(t) R.num[i+b.len]+=(ull)(t);
+				Q.num[i]+=q;
+			};
+			while((q=Get(R,i+b.len-1)/(Get(b,b.len-1)+1))) Sub();
+			q=1;
+			for(int j=b.len-1;j>=0;j--){if(R.num[j+i]!=b.num[j]&&(q=b.num[j]<R.num[i+j],true)) break;}
+			if(q) Sub();
+		}
+		while(Q.len>1&&Q.num[Q.len-1]==0) Q.len--;
+		while(R.len>1&&R.num[R.len-1]==0) R.len--;
+		return make_pair(Q,R);
+	}
 	friend istream& operator>>(istream&in,UnsignedBigInt&x){
 		string s;in>>s;
 		if(in) x=UnsignedBigInt(s);
@@ -223,6 +309,8 @@ public:
 		}
 		return *this;
 	}
+	UnsignedBigInt operator++(){return *this+=1;}
+	UnsignedBigInt operator++(int){UnsignedBigInt res(*this);return *this+=1,res;}
 	UnsignedBigInt operator-(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);
 		c-=b;return c;
@@ -239,19 +327,8 @@ public:
 		while(len>1&&num[len-1]==0) len--;
 		return *this;
 	}
-	void Mul(const UnsignedBigInt&b){
-		ull* temp=new ull[len+b.len+5]();
-		for(int i=0;i<len;i++){
-			ull carry=0,t=num[i];
-			for(int j=0;j<b.len;j++){carry+=temp[i+j]+t*b.num[j];temp[i+j]=carry%BASE,carry/=BASE;}
-			temp[i+b.len]+=carry;
-		}
-		memset(num,0,sizeof(ull)*(len));len=len+b.len+5;
-		for(int i=0;i<len;i++) num[i]=temp[i];
-		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
-		while(len>1&&num[len-1]==0) len--;
-		delete[] temp;
-	}
+	UnsignedBigInt operator--(){return *this-=1;}
+	UnsignedBigInt operator--(int){UnsignedBigInt res(*this);return *this-=1,res;}
 	UnsignedBigInt operator*(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);c*=b;
 		return c;
@@ -310,17 +387,48 @@ public:
 		UnsignedBigInt c(*this);c/=b;
 		return c;
 	}
-	UnsignedBigInt pow(int p)const{
+	UnsignedBigInt operator%=(const ull&b){return *this-=(*this/b*b);}
+	UnsignedBigInt operator%(const ull&b)const{return *this-(*this/b*b);}
+	UnsignedBigInt operator<<=(const ull&b){
+		ull x=b;
+		while(x>=37){
+			len+=5;
+			for(int i=0;i<len;i++) num[i]<<=37;
+			for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
+			while(len>1&&!num[len-1]) len--;
+			x-=37;
+		}
+		len+=5;
+		for(int i=0;i<len;i++) num[i]<<=x;
+		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
+		while(len>1&&!num[len-1]) len--;
+		return *this;
+	}
+	UnsignedBigInt operator>>=(const ull&b){
+		ull x=b;
+		while(x>=37){
+			ull d=0;
+			for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>37);d&=((1ull<<37)-1);}
+			x-=37;
+		}
+		ull d=0;
+		for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>x);d&=((1ull<<x)-1);}
+		return *this;
+	}
+	
+};
+namespace Operation{
+	UnsignedBigInt pow(const UnsignedBigInt&a,int p){
 		if(p==0) return UnsignedBigInt("1");
-		if(p==1) return *this;
-		UnsignedBigInt res("1"),a(*this);
+		if(p==1) return a;
+		UnsignedBigInt res("1"),t(a);
 		for(;p;p>>=1){
-			if(p&1) res*=a;
-			if(p>1) a*=a;
+			if(p&1) res*=t;
+			if(p>1) t*=t;
 		}
 		return res;
 	}
-	static UnsignedBigInt fact(int st,int n){
+	UnsignedBigInt fact(int st,int n){
 		if(n<=16){
 			UnsignedBigInt res=1;
 			for(int i=st;i<st+n;i++) res*=i;
@@ -329,20 +437,8 @@ public:
 		int mid=(n+1)/2;
 		return fact(st,mid)*fact(st+mid,n-mid);
 	}
-	int Two(){
-		if(num[0]%2){return 0;}
-		*this/=2;
-		return Two()+1;
-	}
-	int Cmp(const UnsignedBigInt&b){
-		if(len!=b.len) return len>b.len?1:-1;
-		for(int i=len-1;i>=0;i--){
-			if(num[i]!=b.num[i]) return num[i]>b.num[i]?1:-1;
-		}
-		return 0;
-	}
-	UnsignedBigInt gcd(const UnsignedBigInt&b)const{
-		UnsignedBigInt c(*this),d(b);
+	UnsignedBigInt gcd(const UnsignedBigInt&a,const UnsignedBigInt&b){
+		UnsignedBigInt c(a),d(b);
 		int p=min(c.Two(),d.Two());
 		while(true){
 			int res=c.Cmp(d);
@@ -353,10 +449,21 @@ public:
 		for(int i=1;i<=p;i++) c*=2;
 		return c;
 	}
-};
+}
+//using namespace Operation;
 int main(){
 	UnsignedBigInt a,b;
 	cin>>a>>b;
-	cout<<a.gcd(b);
+	cout<<(a+b)<<'\n';
+	if(a<b) cout<<'-'<<(b-a);
+	else cout<<a-b;
+	cout<<'\n';
+	cout<<(a*b)<<'\n';
+	auto res=a.Simple_Mod(b);
+	cout<<res.first<<'\n'<<res.second;
 	return 0;
 }
+/*
+1145141919810
+114514
+*/
