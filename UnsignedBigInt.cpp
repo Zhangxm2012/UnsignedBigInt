@@ -4,11 +4,17 @@
 #define ll long long
 #define ull unsigned long long
 #define Exit(str,val) {cout<<str;exit(val);}
-#define Re_val 3221225477
-#define LENGTH 4000
+#define LENGTH 10000
 #define MLE "Memory Limit Exceeded"
 #define lf double
 #define llf long double
+#ifdef ONLINE_JUDGE
+#define Re_val 0
+#define Div_val 0
+#else 
+#define Re_val 3221225477
+#define Div_val 3221225620
+#endif
 using namespace std;
 namespace IO{
 	static const int BUFSIZE=1<<20;
@@ -106,12 +112,99 @@ struct FFT{
 };
 class UnsignedBigInt{
 private:
-	static const int LEN=8,BASE=100000000,FFT_BASE=10000,T=255;
+	static const int LEN=8,BASE=100000000,FFT_BASE=10000,T=255,INV=64;
+	static const ull MAX=ULLONG_MAX/(BASE+1),LOG=__lg(MAX)-1;
 	ull num[LENGTH];int len;
 	int Pow(int a,int p){
 		int res=1;
 		for(;p;p>>=1,a=a*a) if(p&1) res=res*a;
 		return res;
+	}
+	void Mul(const UnsignedBigInt&b){
+		ull* temp=new ull[len+b.len+5]();
+		for(int i=0;i<len;i++){
+			ull carry=0,t=num[i];
+			for(int j=0;j<b.len;j++){carry+=temp[i+j]+t*b.num[j];temp[i+j]=carry%BASE,carry/=BASE;}
+			temp[i+b.len]+=carry;
+		}
+		memset(num,0,sizeof(ull)*(len));len=len+b.len+5;
+		for(int i=0;i<len;i++) num[i]=temp[i];
+		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
+		while(len>1&&num[len-1]==0) len--;
+		delete[] temp;
+	}
+	ull Get(const UnsignedBigInt&a,int pos)const{
+		return 10ull*BASE*(pos+1>=a.len?0:a.num[pos+1])+10ull*a.num[pos]+(pos?a.num[pos-1]:0)/(BASE/10);
+	}
+	pair<UnsignedBigInt,UnsignedBigInt> Simple_Mod(const UnsignedBigInt&b)const{
+		if(b==0) Exit("Error:Division by zero!",Re_val);
+		if(*this<b) return make_pair(0,*this);
+		if(*this==b) return make_pair(1,0);
+		if(b.len<=2){ull q=b.num[0]+b.num[1]*BASE;return make_pair(*this/q,*this%q);}
+		UnsignedBigInt Q,R(*this);Q.len=len-b.len+1;
+		for(int i=len-b.len;i>=0;i--){
+			ull q=0;
+			auto Sub=[&](){
+				ll t=0;
+				for(int j=0;j<b.len;j++){
+					t=t-q*b.num[j]+R.num[i+j];
+					R.num[i+j]=(ull)(t%BASE),t/=BASE;
+					if(R.num[i+j]>=BASE) R.num[i+j]+=BASE,t--;
+				}
+				if(t) R.num[i+b.len]+=(ull)(t);
+				Q.num[i]+=q;
+			};
+			while((q=Get(R,i+b.len-1)/(Get(b,b.len-1)+1))) Sub();
+			q=1;
+			for(int j=b.len-1;j>=0;j--){if(R.num[j+i]!=b.num[j]&&(q=b.num[j]<R.num[i+j],true)) break;}
+			if(q) Sub();
+		}
+		while(Q.len>1&&Q.num[Q.len-1]==0) Q.len--;
+		while(R.len>1&&R.num[R.len-1]==0) R.len--;
+		return make_pair(Q,R);
+	}
+	UnsignedBigInt Left(int cnt)const{
+		if(cnt<0) Exit("Left Shift count is negative!",Re_val);
+		if(len+cnt>LENGTH) Exit("Left Shift:Memory Limit Exceeded",Re_val);
+		UnsignedBigInt res;
+		memmove(res.num+cnt,num,len*sizeof(ull)),memset(res.num,0,cnt*sizeof(ull));
+		res.len=len+cnt;return res;
+	}
+	UnsignedBigInt Right(int cnt)const{
+		if(cnt<0) Exit("Right Shift count is negative!",Re_val);
+		if(cnt>=len) return UnsignedBigInt();
+		UnsignedBigInt res;
+		memmove(res.num,num+cnt,(len-cnt)*sizeof(ull));
+		memset(res.num+(len-cnt),0,cnt*sizeof(ull));
+		res.len=len-cnt;
+		while(res.len>1&&res.num[res.len-1]==0) res.len--;
+		return res;
+	}
+	UnsignedBigInt Inv(int n)const{
+		if(*this==0) Exit("Error:Division by zero!",Re_val);
+		if(min(len,n-len)<=INV){
+			UnsignedBigInt a;a.len=n+1;a.num[n]=1;
+			return a.Simple_Mod(*this).first;
+		}
+		int k=(n-len+5)>>1,kk=k>len?0:len-k;
+		UnsignedBigInt t=Right(kk);
+		int n1=k+t.len;
+		UnsignedBigInt t1=t.Inv(n1);
+		UnsignedBigInt res=(t1+t1).Left(n-n1-kk)-(*this*t1*t1).Right(2*(n1+kk)-n);
+		return --res;
+	}
+	pair<UnsignedBigInt,UnsignedBigInt> Mod(const UnsignedBigInt&b)const{
+		if(*this<b) return make_pair(0,*this);
+		if(len<=T||b.len<=T) return Simple_Mod(b);
+		int Len=len-b.len+5,cnt=Len>b.len?0:b.len-Len;
+		UnsignedBigInt tem=b.Right(cnt);
+		if(cnt) tem++;
+		int inv=Len+tem.len;
+		UnsignedBigInt Q=(*this*tem.Inv(inv)).Right(inv+cnt);
+		while(Q*b>*this) Q--;
+		UnsignedBigInt R=*this-Q*b;
+		while(R>=b) Q++,R-=b;//here
+		return make_pair(Q,R);
 	}
 public:
 	UnsignedBigInt(){
@@ -124,6 +217,7 @@ public:
 		init();
 		int st=0;
 		len=(s.size()-st+LEN-1)/LEN;
+		if(len>=LENGTH) Exit(MLE,Re_val);
 		for(int i=s.size()-1,j=0;i>=st;i--,j++){
 			num[j/LEN]+=(s[i]-'0')*Pow(10,j%LEN);
 		}
@@ -171,80 +265,6 @@ public:
 			if(num[i]!=b.num[i]) return num[i]>b.num[i]?1:-1;
 		}
 		return 0;
-	}
-	void Mul(const UnsignedBigInt&b){
-		ull* temp=new ull[len+b.len+5]();
-		for(int i=0;i<len;i++){
-			ull carry=0,t=num[i];
-			for(int j=0;j<b.len;j++){carry+=temp[i+j]+t*b.num[j];temp[i+j]=carry%BASE,carry/=BASE;}
-			temp[i+b.len]+=carry;
-		}
-		memset(num,0,sizeof(ull)*(len));len=len+b.len+5;
-		for(int i=0;i<len;i++) num[i]=temp[i];
-		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
-		while(len>1&&num[len-1]==0) len--;
-		delete[] temp;
-	}
-	UnsignedBigInt Left(int cnt)const{
-		if(cnt<=0) Exit("Left Shift count is negative!",Re_val);
-		if(len+cnt>LENGTH) Exit("Left Shift:Memory Limit Exceeded",Re_val);
-		UnsignedBigInt res;
-		memmove(res.num+cnt,num,len*sizeof(ull)),memset(res.num,0,cnt*sizeof(ull));
-		res.len=len+cnt;return res;
-	}
-	UnsignedBigInt Right(int cnt)const{
-		if(cnt<=0) Exit("Right Shift count is negative!",Re_val);
-		if(cnt>=len) return UnsignedBigInt();
-		UnsignedBigInt res;
-		memmove(res.num,num+cnt,(len-cnt)*sizeof(ull));
-		memset(res.num+(len-cnt),0,cnt*sizeof(ull));
-		res.len=len-cnt;
-		while(res.len>1&&res.num[res.len-1]==0) res.len--;
-		return res;
-	}
-	UnsignedBigInt Inv(int n)const{
-		if(*this==0) Exit("Error:Division by zero!",Re_val);
-		if(min(len,n-len)<=16){
-			UnsignedBigInt a;a.len=n+1;a.num[len]=1;
-		}
-	}
-	bool Cmp_eq(const UnsignedBigInt&a,const UnsignedBigInt&b,int last)const{
-		if(last+b.len>a.len) return 0;
-		if(a.num[last+b.len]!=0) return 1;
-		for(int i=b.len-1;i>=0;i--){
-			if(a.num[last+i]!=b.num[i]){return a.num[last+i]>b.num[i];}
-		}
-		return 1;
-	}
-	ull Get(const UnsignedBigInt&a,int pos)const{
-		return 10ull*BASE*(pos+1>=a.len?0:a.num[pos+1])+10ull*a.num[pos]+(pos?a.num[pos-1]:0)/(BASE/10);
-	}
-	pair<UnsignedBigInt,UnsignedBigInt> Simple_Mod(const UnsignedBigInt&b)const{
-		if(b==0) Exit("Error:Division by zero!",Re_val);
-		if(*this<b) return make_pair(0,*this);
-		if(*this==b) return make_pair(1,0);
-		if(b.len<=2){ull q=b.num[0]+b.num[1]*BASE;return make_pair(*this/q,*this%q);}
-		UnsignedBigInt Q,R(*this);Q.len=len-b.len+1;
-		for(int i=len-b.len;i>=0;i--){
-			ull q=0;
-			auto Sub=[&](){
-				ll t=0;
-				for(int j=0;j<b.len;j++){
-					t=t-q*b.num[j]+R.num[i+j];
-					R.num[i+j]=(ull)(t%BASE),t/=BASE;
-					if(R.num[i+j]>=BASE) R.num[i+j]+=BASE,t--;
-				}
-				if(t) R.num[i+b.len]+=(ull)(t);
-				Q.num[i]+=q;
-			};
-			while((q=Get(R,i+b.len-1)/(Get(b,b.len-1)+1))) Sub();
-			q=1;
-			for(int j=b.len-1;j>=0;j--){if(R.num[j+i]!=b.num[j]&&(q=b.num[j]<R.num[i+j],true)) break;}
-			if(q) Sub();
-		}
-		while(Q.len>1&&Q.num[Q.len-1]==0) Q.len--;
-		while(R.len>1&&R.num[R.len-1]==0) R.len--;
-		return make_pair(Q,R);
 	}
 	friend istream& operator>>(istream&in,UnsignedBigInt&x){
 		string s;in>>s;
@@ -360,8 +380,12 @@ public:
 		while(len>1&&!num[len-1]) len--;
 		return *this;
 	}
+	UnsignedBigInt operator/=(const UnsignedBigInt&b){*this=Mod(b).first;return *this;}
+	UnsignedBigInt operator/(const UnsignedBigInt&b)const{return Mod(b).first;}
+	UnsignedBigInt operator%=(const UnsignedBigInt&b){*this=Mod(b).second;return *this;}
+	UnsignedBigInt operator%(const UnsignedBigInt&b)const{return Mod(b).second;}
 	UnsignedBigInt operator*=(const ull&b){
-		if(b<=184467438892){
+		if(b<=MAX){
 			len+=3;
 			for(int i=0;i<len;i++){num[i]*=b;}
 			for(int i=0;i<len;i++){num[i+1]+=num[i]/BASE,num[i]%=BASE;}
@@ -375,8 +399,8 @@ public:
 		return c;
 	}
 	UnsignedBigInt operator/=(const ull&b){
-		if(b==0) Exit("Error:Division by zero!",Re_val);
-		ull d=0;
+		if(b==0) Exit("Error:Division by zero!",Div_val);
+		__int128_t d=0;
 		for(int i=len-1;i>=0;i--){
 			d=d*BASE+num[i];num[i]=d/b;d%=b;
 		}
@@ -387,16 +411,21 @@ public:
 		UnsignedBigInt c(*this);c/=b;
 		return c;
 	}
-	UnsignedBigInt operator%=(const ull&b){return *this-=(*this/b*b);}
-	UnsignedBigInt operator%(const ull&b)const{return *this-(*this/b*b);}
+	UnsignedBigInt operator%=(const ull&b){
+		if(b==0) Exit("Error:Division by zero!",Div_val);
+		__int128_t d=0;
+		for(int i=len-1;i>=0;i--){d=d*BASE+num[i];d%=b;}
+		return *this=d;
+	}
+	UnsignedBigInt operator%(const ull&b)const{UnsignedBigInt res(*this);res%=b;return res;}
 	UnsignedBigInt operator<<=(const ull&b){
 		ull x=b;
-		while(x>=37){
+		while(x>=LOG){
 			len+=5;
 			for(int i=0;i<len;i++) num[i]<<=37;
 			for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
 			while(len>1&&!num[len-1]) len--;
-			x-=37;
+			x-=LOG;
 		}
 		len+=5;
 		for(int i=0;i<len;i++) num[i]<<=x;
@@ -406,10 +435,10 @@ public:
 	}
 	UnsignedBigInt operator>>=(const ull&b){
 		ull x=b;
-		while(x>=37){
+		while(x>=LOG){
 			ull d=0;
-			for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>37);d&=((1ull<<37)-1);}
-			x-=37;
+			for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>LOG);d&=((1ull<<LOG)-1);}
+			x-=LOG;
 		}
 		ull d=0;
 		for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>x);d&=((1ull<<x)-1);}
@@ -418,7 +447,7 @@ public:
 	
 };
 namespace Operation{
-	UnsignedBigInt pow(const UnsignedBigInt&a,int p){
+	UnsignedBigInt Pow(const UnsignedBigInt&a,int p){
 		if(p==0) return UnsignedBigInt("1");
 		if(p==1) return a;
 		UnsignedBigInt res("1"),t(a);
@@ -428,16 +457,16 @@ namespace Operation{
 		}
 		return res;
 	}
-	UnsignedBigInt fact(int st,int n){
+	UnsignedBigInt Fact(int st,int n){
 		if(n<=16){
 			UnsignedBigInt res=1;
 			for(int i=st;i<st+n;i++) res*=i;
 			return res;
 		}
 		int mid=(n+1)/2;
-		return fact(st,mid)*fact(st+mid,n-mid);
+		return Fact(st,mid)*Fact(st+mid,n-mid);
 	}
-	UnsignedBigInt gcd(const UnsignedBigInt&a,const UnsignedBigInt&b){
+	UnsignedBigInt Gcd(const UnsignedBigInt&a,const UnsignedBigInt&b){
 		UnsignedBigInt c(a),d(b);
 		int p=min(c.Two(),d.Two());
 		while(true){
@@ -449,21 +478,6 @@ namespace Operation{
 		for(int i=1;i<=p;i++) c*=2;
 		return c;
 	}
+	UnsignedBigInt lcm(const UnsignedBigInt&a,const UnsignedBigInt&b){return a*b/Gcd(a,b);}
 }
-//using namespace Operation;
-int main(){
-	UnsignedBigInt a,b;
-	cin>>a>>b;
-	cout<<(a+b)<<'\n';
-	if(a<b) cout<<'-'<<(b-a);
-	else cout<<a-b;
-	cout<<'\n';
-	cout<<(a*b)<<'\n';
-	auto res=a.Simple_Mod(b);
-	cout<<res.first<<'\n'<<res.second;
-	return 0;
-}
-/*
-1145141919810
-114514
-*/
+using namespace Operation;
