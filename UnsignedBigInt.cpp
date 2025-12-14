@@ -1,10 +1,11 @@
-#include<bits/stdc++.h>
-#define debug cout<<"Here\n"
-#define QWQ "QwQ,Cannot handle negative numbers."
+#include<iostream>
+#include<vector>
+#include<cmath>
+#include<cstring>
+#include<climits>
 #define ll long long
 #define ull unsigned long long
 #define Exit(str,val) {cout<<str;exit(val);}
-#define LENGTH 10000
 #define MLE "Memory Limit Exceeded"
 #define lf double
 #define llf long double
@@ -14,6 +15,11 @@
 #else 
 #define Re_val 3221225477
 #define Div_val 3221225620
+#endif
+#ifdef SIZE
+#define LENGTH SIZE
+#else
+#define LENGTH 10000
 #endif
 using namespace std;
 namespace IO{
@@ -212,7 +218,7 @@ public:
 		len=1;
 	}
 	UnsignedBigInt(const string&s){
-		if(s[0]=='-') Exit(QWQ,Re_val);
+		if(s[0]=='-') Exit("QwQ,Cannot handle negative numbers.",Re_val);
 		for(int i=0;i<(int)s.size();i++){if(!isdigit(s[i])) Exit("Not a valid numeric string",Re_val);}
 		init();
 		int st=0;
@@ -336,7 +342,7 @@ public:
 		c-=b;return c;
 	}
 	UnsignedBigInt operator-=(const UnsignedBigInt&b){
-		if(*this<b) Exit(QWQ,Re_val);
+		if(*this<b) Exit("QwQ,Cannot handle negative numbers.",Re_val);
 		ull t=0;
 		for(int i=0;i<len;i++){
 			ull sub=((i<b.len)?b.num[i]:0)+t;
@@ -419,32 +425,30 @@ public:
 	}
 	UnsignedBigInt operator%(const ull&b)const{UnsignedBigInt res(*this);res%=b;return res;}
 	UnsignedBigInt operator<<=(const ull&b){
-		ull x=b;
-		while(x>=LOG){
-			len+=5;
-			for(int i=0;i<len;i++) num[i]<<=37;
-			for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
-			while(len>1&&!num[len-1]) len--;
-			x-=LOG;
-		}
-		len+=5;
-		for(int i=0;i<len;i++) num[i]<<=x;
-		for(int i=0;i<len;i++) num[i+1]+=num[i]/BASE,num[i]%=BASE;
-		while(len>1&&!num[len-1]) len--;
+		UnsignedBigInt base("1");ull p=b;
+		for(;p;p>>=1,base*=2) if(p&1) *this*=base;
 		return *this;
 	}
 	UnsignedBigInt operator>>=(const ull&b){
 		ull x=b;
-		while(x>=LOG){
+		auto Div=[&](int cnt){
 			ull d=0;
-			for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>LOG);d&=((1ull<<LOG)-1);}
-			x-=LOG;
-		}
-		ull d=0;
-		for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>x);d&=((1ull<<x)-1);}
+			for(int i=len-1;i>=0;i--){d=d*BASE+num[i];num[i]=(d>>cnt);d&=((1ull<<cnt)-1);}
+			while(len>1&&!num[len-1]) len--;
+			x-=cnt;
+		};
+		while(x>=LOG) Div(LOG);
+		Div(x);
 		return *this;
 	}
-	
+	UnsignedBigInt operator>>(const ull&b)const{UnsignedBigInt res(*this);res>>=b;return res;}
+	UnsignedBigInt operator<<(const ull&b)const{UnsignedBigInt res(*this);res<<=b;return res;}
+	operator string()const{
+		string s="";
+		for(int i=len-1;i>=0;i--){char buf[10];sprintf(buf,"%08llu",num[i]);s+=buf;}
+		return s;
+	}
+	bool True()const{return !(len==1&&num[0]==0);}
 };
 namespace Operation{
 	UnsignedBigInt Pow(const UnsignedBigInt&a,int p){
@@ -475,9 +479,18 @@ namespace Operation{
 			else if(res<0) d-=c,d.Two();
 			else break;
 		}
-		for(int i=1;i<=p;i++) c*=2;
+		c<<=p;
 		return c;
 	}
-	UnsignedBigInt lcm(const UnsignedBigInt&a,const UnsignedBigInt&b){return a*b/Gcd(a,b);}
+	UnsignedBigInt Lcm(const UnsignedBigInt&a,const UnsignedBigInt&b){return a*b/Gcd(a,b);}
 }
 using namespace Operation;
+#undef ll
+#undef ull
+#undef Exit
+#undef MLE
+#undef lf
+#undef llf
+#undef Re_val
+#undef Div_val
+#undef LENGTH
