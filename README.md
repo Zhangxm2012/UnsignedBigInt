@@ -1,6 +1,6 @@
 # UnsignedBigInt
 无符号大整数库
-（还不完善，乘法已实现）
+（还不完善，加减乘除模、左右移、gcd、lcm、阶乘已实现）
 ## upd on 2025/11/23
 添加了快读快输出
 ## upd on 2025/11/25
@@ -11,3 +11,10 @@
 添加了朴素除法
 ## upd on 2025/12/9
 补了高精除低精的锅，添加了真正的大数除法，并在 [这道题](https://loj.ac/p/164) 中最慢跑了 $50$ms
+## upd on 2025/12/14
+更新左右移，和通过在引用文件前定义宏 SIZE，来修改长度
+```cpp
+#define SIZE 114514
+#include "UnsignedBigInt.cpp"
+//your code
+```
