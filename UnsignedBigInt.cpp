@@ -19,7 +19,7 @@
 #ifdef SIZE
 #define LENGTH SIZE
 #else
-#define LENGTH 10000
+#define LENGTH 10004
 #endif
 using namespace std;
 namespace IO{
@@ -449,6 +449,37 @@ public:
 		return s;
 	}
 	bool True()const{return !(len==1&&num[0]==0);}
+	UnsignedBigInt Pow(int p){
+		if(p==0) return UnsignedBigInt("1");
+		if(p==1) return *this;
+		UnsignedBigInt res("1"),t(*this);
+		for(;p;p>>=1){
+			if(p&1) res*=t;
+			if(p>1) t*=t;
+		}
+		return res;
+	}
+	UnsignedBigInt root(int m)const{
+		if(*this==0) return 0;
+		if(m==1) return *this;
+		UnsignedBigInt x(min(*this,UnsignedBigInt(BASE-1).Left((len+m-1)/m-1))),xx;
+		int top=x.len-1;
+		int l=0,r=BASE-1;
+		while(l<r){
+			int mid=(l+r)>>1;
+			x.num[top]=mid;
+			if(x.Pow(m)<=*this) l=mid+1;
+			else r=mid;
+		}
+		x.num[top]=l;
+		while(x.len>1&&!x.num[x.len-1]) x.len--;
+		xx=(x*(m-1)+*this/x.Pow(m-1))/m;
+		while(xx<x){ 
+			swap(x,xx);
+			xx=(x*(m-1)+*this/x.Pow(m-1))/m;
+		}
+		return x;
+	}
 };
 namespace Operation{
 	UnsignedBigInt Pow(const UnsignedBigInt&a,int p){
@@ -483,6 +514,7 @@ namespace Operation{
 		return c;
 	}
 	UnsignedBigInt Lcm(const UnsignedBigInt&a,const UnsignedBigInt&b){return a*b/Gcd(a,b);}
+	UnsignedBigInt Root(const UnsignedBigInt&a,ull p){return a.root(p);}
 }
 using namespace Operation;
 #undef ll
