@@ -9,10 +9,12 @@
 #include<immintrin.h>
 #include<complex>
 #include<random>
+#include<algorithm>
 #define lf double
 #define ull unsigned long long
 #define ll long long
 #define u32 unsigned
+#define int128 __int128_t
 #ifdef SIZE
 #define LENGTH SIZE
 #else
@@ -79,6 +81,7 @@ namespace Transform{
 		Complex operator/(const int&x)const{return val/_mm_set1_pd(x);}
 		void operator*=(const Complex&b){*this=*this*b;}
 		void operator/=(const int&x){*this=*this/x;}
+		Complex conj()const{return Complex(_mm_xor_pd(val,_mm_set_pd(-0.0,0.0)));}
 		lf real(){return val[0];}
 		lf imag(){return val[1];}
 	};
@@ -118,7 +121,7 @@ namespace Transform{
 			omega.clear(),omega.resize(l,{0.0,0.0});
 			omega[0]={1.0,0.0};
 			for(int i=1;i<l;i<<=1) omega[i]={cos(pi2*i/l),sin(pi2*i/l)};
-			for(int i=0;i<l;i++) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
+			for(int i=0;i<l;i++) if(i&(i-1)) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
 		}
 	};
 }
@@ -168,12 +171,17 @@ namespace IO{
 	}
 }
 
+#if __cplusplus<201703L
+static constexpr ull p10[]={1,10,100,1000,10000,100000,1000000,10000000,100000000};
+#endif
 class UnsignedBigInt{
 private:
 	static const u32 LEN=8,BASE=100000000,FFT_BASE=10000,T=255,INV=64,DEFAULT=1000;
 	static const ull MAX=ULLONG_MAX/(BASE+1),LOG=std::__lg(MAX)-1;
 	std::unique_ptr<ull[]>num;int len,Max;
+#if __cplusplus>=201703L
 	static constexpr ull p10[]={1,10,100,1000,10000,100000,1000000,10000000,100000000};
+#endif
 	ull Pow_10(int p){return p10[p];}
 	bool is_zero()const{return len==1&&num[0]==0;}
 	void Expand(int nMax){
@@ -203,7 +211,7 @@ private:
 		return 10ull*BASE*(pos+1>=a.len?0:a.num[pos+1])+10ull*a.num[pos]+(pos?a.num[pos-1]:0)/(BASE/10);
 	}
 	std::pair<UnsignedBigInt,UnsignedBigInt> Simple_Mod(const UnsignedBigInt&b)const{
-		if(b==0) throw ERROR::Div_by_zero();
+		if(b.is_zero()) throw ERROR::Div_by_zero();
 		if(*this<b) return std::make_pair(0,*this);
 		if(*this==b) return std::make_pair(1,0);
 		if(b.len<=2){ull q=b.num[0]+b.num[1]*BASE;return std::make_pair(*this/q,*this%q);}
@@ -249,7 +257,7 @@ private:
 		return res;
 	}
 	UnsignedBigInt Inv(int n)const{
-		if(*this==0) throw ERROR::Div_by_zero();
+		if(is_zero()) throw ERROR::Div_by_zero();
 		if(len<=(int)INV||n<=(int)INV+len){
 			UnsignedBigInt a;a.Expand(n+1),a.len=n+1;
 			std::fill(a.num.get(),a.num.get()+a.len,0),a.num[n]=1;
@@ -275,30 +283,10 @@ private:
 		while(R>=b) Q++,R-=b;
 		return std::make_pair(Q,R);
 	}
-	void Square(){
-		if(len<=(int)T){Mul(*this);return;}
-		int k=1,Len=2,n=len;
-		while((1<<k)<(n<<1)) k++,Len<<=1;
-		Len<<=1,k++;
-		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-		Transform::FFT<lf>FFT_a;FFT_a.init(Len+1);
-		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1]={(lf)(num[i]%FFT_BASE),0.0},FFT_a.fft_a[i<<1|1]={(lf)(num[i]/FFT_BASE),0.0};
-		FFT_a.Init(k);
-		FFT_a.fft(1,Len);
-		for(int i=0;i<Len;i++) FFT_a.fft_a[i]*=FFT_a.fft_a[i];
-		FFT_a.fft(-1,Len);
-		Expand(Len);
-		std::fill(num.get(),num.get()+len,0);
-		for(int i=0;i<Len;i+=2){
-			int idx=i>>1;
-			__uint128_t t=(ull)(FFT_a.fft_a[i|1].real()+0.5)*FFT_BASE+(ull)(FFT_a.fft_a[i].real()+0.5);
-			num[idx]+=t%BASE;
-			num[idx+1]+=num[idx]/BASE;
-			num[idx]%=BASE;
-			num[idx+1]+=t/BASE;
-		}
-		len=(Len>>1)+1;
-		while(len>1&&!num[len-1]) len--;
+	ull Get_sqrt()const{
+		if(len<2) throw ERROR::Out_of_range();
+		int top=len-1;ull res=num[top]*BASE+num[top-1];
+		return std::sqrt(res)+1;
 	}
 public:
 	UnsignedBigInt():len(1),Max(DEFAULT){
@@ -349,6 +337,33 @@ public:
 		}
 		while(len>1&&num[len-1]==0) len--;
 	}
+	UnsignedBigInt(const char*s){
+		u32 Len=std::strlen(s);
+		if(Len==0) throw ERROR::Number();
+		if(s[0]=='-') throw ERROR::Negative("This number");
+		for(int i=0;i<(int)Len;i++) if(!isdigit(s[i])) throw ERROR::Number();
+		len=(Len+LEN-1)/LEN;
+		if(len>=LENGTH) throw ERROR::MLE("This number");
+		Max=std::max((int)DEFAULT,len+5),num=std::make_unique<ull[]>(Max);
+		for(int i=(int)Len-1,j=0;i>=0;i--,j++){
+			num[j/LEN]+=(s[i]-'0')*Pow_10(j%LEN);
+		}
+		while(len>1&&num[len-1]==0) len--;
+	}
+#if __cplusplus>=201703L
+	UnsignedBigInt(std::string_view s){
+		if(s.empty()) throw ERROR::Number();
+		if(s[0]=='-') throw ERROR::Negative("This number");
+		for(int i=0;i<(int)s.size();i++) if(!isdigit(s[i])) throw ERROR::Number();
+		len=(s.size()+LEN-1)/LEN;
+		if(len>=LENGTH) throw ERROR::MLE("This number");
+		Max=std::max((int)DEFAULT,len+5),num=std::make_unique<ull[]>(Max);
+		for(int i=(int)s.size()-1,j=0;i>=0;i--,j++){
+			num[j/LEN]+=(s[i]-'0')*Pow_10(j%LEN);
+		}
+		while(len>1&&num[len-1]==0) len--;
+	}
+#endif
 	void fread(){
 		std::string s;
 		char c=IO::get();
@@ -392,6 +407,9 @@ public:
 		}
 		return 0;
 	}
+#if __cplusplus>=202002L
+	std::strong_ordering operator<=>(const UnsignedBigInt&b)const{return Cmp(b)<=>0;}
+#endif
 	bool operator<(const UnsignedBigInt&b)const{return Cmp(b)<0;}
 	bool operator>=(const UnsignedBigInt&b)const{return Cmp(b)>=0;}
 	bool operator<=(const UnsignedBigInt&b)const{return Cmp(b)<=0;}
@@ -404,7 +422,7 @@ public:
 		UnsignedBigInt c(*this);c+=b;
 		return c;
 	}
-	UnsignedBigInt operator+=(const UnsignedBigInt&b){
+	UnsignedBigInt& operator+=(const UnsignedBigInt&b){
 		int n=std::max(len,b.len)+1;Expand(n),len=n;
 		for(int i=0;i<n;i++) num[i]+=((i<b.len)?b.num[i]:0);
 		for(int i=0;i<n;i++){
@@ -415,13 +433,13 @@ public:
 		while(len>1&&num[len-1]==0) len--;
 		return *this;
 	}
-	UnsignedBigInt operator++(){return *this+=1;}
+	UnsignedBigInt& operator++(){return *this+=1;}
 	UnsignedBigInt operator++(int){UnsignedBigInt res(*this);return *this+=1,res;}
 	UnsignedBigInt operator-(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);
 		c-=b;return c;
 	}
-	UnsignedBigInt operator-=(const UnsignedBigInt&b){
+	UnsignedBigInt& operator-=(const UnsignedBigInt&b){
 		if(*this<b) throw ERROR::Negative("Result");
 		ull t=0;
 		for(int i=0;i<len;i++){
@@ -433,13 +451,13 @@ public:
 		while(len>1&&num[len-1]==0) len--;
 		return *this;
 	}
-	UnsignedBigInt operator--(){return *this-=1;}
+	UnsignedBigInt& operator--(){return *this-=1;}
 	UnsignedBigInt operator--(int){UnsignedBigInt res(*this);return *this-=1,res;}
 	UnsignedBigInt operator*(const UnsignedBigInt&b)const{
 		UnsignedBigInt c(*this);c*=b;
 		return c;
 	}
-	UnsignedBigInt operator*=(const UnsignedBigInt&b){
+	UnsignedBigInt& operator*=(const UnsignedBigInt&b){//https://judge.yosupo.jp/submission/341166
 		if(len<=(int)T||b.len<=(int)T){Mul(b);return *this;}
 		int k=1,Len=2,n=len,m=b.len;
 		while((1<<k)<n+m) k++,Len<<=1;
@@ -467,11 +485,11 @@ public:
 		while(len>1&&!num[len-1]) len--;
 		return *this;
 	}
-	UnsignedBigInt operator/=(const UnsignedBigInt&b){*this=Mod(b).first;return *this;}
+	UnsignedBigInt& operator/=(const UnsignedBigInt&b){*this=Mod(b).first;return *this;}
 	UnsignedBigInt operator/(const UnsignedBigInt&b)const{return Mod(b).first;}
-	UnsignedBigInt operator%=(const UnsignedBigInt&b){*this=Mod(b).second;return *this;}
+	UnsignedBigInt& operator%=(const UnsignedBigInt&b){*this=Mod(b).second;return *this;}
 	UnsignedBigInt operator%(const UnsignedBigInt&b)const{return Mod(b).second;}
-	UnsignedBigInt operator*=(const ull&b){
+	UnsignedBigInt& operator*=(const ull&b){
 		if(b<=MAX){
 			Expand(len+3),len+=3;
 			for(int i=0;i<len;i++){num[i]*=b;}
@@ -485,9 +503,9 @@ public:
 		UnsignedBigInt c(*this);c*=b;
 		return c;
 	}
-	UnsignedBigInt operator/=(const ull&b){
+	UnsignedBigInt& operator/=(const ull&b){
 		if(b==0) throw ERROR::Div_by_zero();
-		__int128_t d=0;
+		int128 d=0;
 		for(int i=len-1;i>=0;i--){
 			d=d*BASE+num[i];num[i]=d/b;d%=b;
 		}
@@ -498,19 +516,19 @@ public:
 		UnsignedBigInt c(*this);c/=b;
 		return c;
 	}
-	UnsignedBigInt operator%=(const ull&b){
+	UnsignedBigInt& operator%=(const ull&b){
 		if(b==0) throw ERROR::Div_by_zero();
-		__int128_t d=0;
+		int128 d=0;
 		for(int i=len-1;i>=0;i--){d=d*BASE+num[i];d%=b;}
 		return *this=d;
 	}
 	UnsignedBigInt operator%(const ull&b)const{UnsignedBigInt res(*this);res%=b;return res;}
-	UnsignedBigInt operator<<=(const ull&b){
+	UnsignedBigInt& operator<<=(const ull&b){
 		UnsignedBigInt base("2");ull p=b;
-		for(;p;p>>=1,base*=base) if(p&1) *this*=base;
+		for(;p;p>>=1,base.Square()) if(p&1) *this*=base;
 		return *this;
 	}
-	UnsignedBigInt operator>>=(const ull&b){
+	UnsignedBigInt& operator>>=(const ull&b){
 		if(b<=10000){
 			ull x=b;
 			auto Div=[&](int cnt){
@@ -533,13 +551,13 @@ public:
 		UnsignedBigInt res("1"),t(*this);ull p=b;
 		for(;p;p>>=1){
 			if(p&1) res*=t;
-			if(p>1) t*=t;
+			if(p>1) t.Square();
 		}
 		return res;
 	}
 	UnsignedBigInt root(int m)const{
 		if(m<0) throw ERROR::Negative("Index");
-		if(*this==0) return 0;
+		if(is_zero()) return *this;
 		if(m==1) return *this;
 		UnsignedBigInt x(std::min(*this,UnsignedBigInt(BASE-1).Left((len+m-1)/m-1))),xx;
 		int top=x.len-1;
@@ -559,6 +577,18 @@ public:
 		}
 		return x;
 	}
+	UnsignedBigInt sqrt()const{
+		if(is_zero()) return *this;
+		if(len==1) return (ull)std::sqrt(num[0]);
+		if(len==2) return (ull)std::sqrt(num[1]*BASE+num[0]);
+		UnsignedBigInt x,xx;x.Expand((len+1)>>1),x.len=(len+1)>>1;
+		int top=x.len-1;ull res=Get_sqrt();
+		x.num[top]=res;
+		while(x.len>1&&!x.num[x.len-1]) x.len--;
+		xx=(x+*this/x)/2;
+		while(xx<x) std::swap(x,xx),xx=(x+*this/x)/2;
+		return x;
+	}
 	operator std::string()const{
 		std::string s="";s+=std::to_string(num[len-1]);
 		for(int i=len-2;i>=0;i--){char buf[10];sprintf(buf,"%08llu",num[i]);s+=buf;}
@@ -566,7 +596,37 @@ public:
 	}
 	bool True()const{return !is_zero();}
 	void test()const{std::cout<<LENGTH<<'\n';}
+	void square(){
+		if(len<=(int)T){Mul(*this);return;}
+		int k=1,Len=2,n=len;
+		while((1<<k)<(n<<1)) k++,Len<<=1;
+		Len<<=1,k++;
+		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
+		Transform::FFT<lf>FFT_a;FFT_a.init(Len+1);
+		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1]={(lf)(num[i]%FFT_BASE),0.0},FFT_a.fft_a[i<<1|1]={(lf)(num[i]/FFT_BASE),0.0};
+		FFT_a.Init(k);
+		FFT_a.fft(1,Len);
+		for(int i=0;i<Len;i++) FFT_a.fft_a[i]*=FFT_a.fft_a[i];
+		FFT_a.fft(-1,Len);
+		Expand(Len);
+		std::fill(num.get(),num.get()+len,0);
+		for(int i=0;i<Len;i+=2){
+			int idx=i>>1;
+			__uint128_t t=(ull)(FFT_a.fft_a[i|1].real()+0.5)*FFT_BASE+(ull)(FFT_a.fft_a[i].real()+0.5);
+			num[idx]+=t%BASE;
+			num[idx+1]+=num[idx]/BASE;
+			num[idx]%=BASE;
+			num[idx+1]+=t/BASE;
+		}
+		len=(Len>>1)+1;
+		while(len>1&&!num[len-1]) len--;
+	}
+	UnsignedBigInt Square()const{
+		UnsignedBigInt res(*this);
+		res.square();return res;
+	}
 };
+UnsignedBigInt operator""_UI(const char*literal,size_t len){return UnsignedBigInt(literal);}
 
 namespace Operation{
 	UnsignedBigInt Pow(const UnsignedBigInt&a,int p){
@@ -576,9 +636,21 @@ namespace Operation{
 		UnsignedBigInt res("1"),t(a);
 		for(;p;p>>=1){
 			if(p&1) res*=t;
-			if(p>1) t*=t;
+			if(p>1) t.Square();
 		}
 		return res;
+	}
+	UnsignedBigInt Pow(const UnsignedBigInt&a,int p,const UnsignedBigInt&Mod){
+		if(p<0) throw ERROR::Negative("Exponent");
+		if(p==0) return UnsignedBigInt("1");
+		UnsignedBigInt t(a%Mod);
+		if(p==1) return t;
+		UnsignedBigInt res("1");
+		for(;p;p>>=1){
+			if(p&1) res*=t,res%=Mod;
+			if(p>1) t.Square(),t%=Mod;
+		}
+		return res%Mod;
 	}
 	UnsignedBigInt Fact(int st,int n){
 		if(n<=16){
@@ -589,6 +661,7 @@ namespace Operation{
 		int mid=(n+1)/2;
 		return Fact(st,mid)*Fact(st+mid,n-mid);
 	}
+	UnsignedBigInt Fact(int n){return Fact(1,n);}
 	UnsignedBigInt Gcd(const UnsignedBigInt&a,const UnsignedBigInt&b){
 		UnsignedBigInt c(a),d(b);
 		int p=std::min(c.Two(),d.Two());
@@ -614,10 +687,12 @@ namespace Operation{
 		}
 		return UnsignedBigInt(s);
 	}
-	UnsignedBigInt Sqrt(const UnsignedBigInt&a){return Root(a,2);}
+	UnsignedBigInt Sqrt(const UnsignedBigInt&a){return a.sqrt();}
 }
+
 #undef ull
 #undef u32
 #undef lf
 #undef ll
 #undef LENGTH
+#undef int128
