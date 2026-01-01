@@ -1,3 +1,4 @@
+#pragma GCC target("fma")
 #include<vector>
 #include<stdexcept>
 #include<cmath>
@@ -15,6 +16,7 @@
 #define ll long long
 #define u32 unsigned
 #define int128 __int128_t
+#define __AVX2__ 1
 #ifdef SIZE
 #define LENGTH SIZE
 #else
@@ -57,36 +59,20 @@ namespace Transform{
 	struct fComplex{
 		T rez,imz;
 		fComplex(){rez=0.0,imz=0.0;}
-		fComplex(lf x,lf y){rez=x,imz=y;}
+		fComplex(T x,T y){rez=x,imz=y;}
+		template<class C>fComplex(std::complex<C>x):rez(x.real()),imz(x.imag()){}
 		fComplex operator+(const fComplex&b)const{return {rez+b.rez,imz+b.imz};}
 		fComplex operator-(const fComplex&b)const{return {rez-b.rez,imz-b.imz};}
 		fComplex operator*(const fComplex&b)const{return {rez*b.rez-imz*b.imz,rez*b.imz+imz*b.rez};}
-		void operator/=(const int&b){rez/=b,imz/=b;}
-		void operator*=(const fComplex&b){*this=*this*b;}
-		fComplex conj(){return {rez,-imz};}
-		T real(){return rez;}
-		T imag(){return imz;}
+		fComplex& operator*=(const fComplex&b){*this=*this*b;return *this;}
+		fComplex& operator*(const T&b){return {rez*b,imz*b};}
+		fComplex& operator*=(const T&b){rez*=b,imz*=b;return *this;}
+		fComplex operator+(const T&x)const{return rez+=x;}
+		fComplex conj()const{return {rez,-imz};}
+		T real()const{return rez;}
+		T imag()const{return imz;}
 	};
 	using Complex=fComplex<lf>;
-#else
-	struct Complex{
-		__m128d val;
-		Complex()=default;
-		Complex(const __m128d&x):val(x){}
-		Complex(lf x,lf y):val(_mm_set_pd(y,x)){}
-		template<class C>Complex(std::complex<C>x):val(_mm_set_pd(x.imag(),x.real())){}
-		Complex operator+(const Complex&x)const{return val+x.val;}
-		Complex operator-(const Complex&x)const{return val-x.val;}
-		Complex operator*(const Complex&x)const{return _mm_fmaddsub_pd(_mm_unpacklo_pd(val,val),x.val,_mm_unpackhi_pd(val,val)*_mm_permute_pd(x.val,1));}
-		Complex operator/(const int&x)const{return val/_mm_set1_pd(x);}
-		void operator*=(const Complex&b){*this=*this*b;}
-		void operator/=(const int&x){*this=*this/x;}
-		Complex conj()const{return Complex(_mm_xor_pd(val,_mm_set_pd(-0.0,0.0)));}
-		lf real(){return val[0];}
-		lf imag(){return val[1];}
-	};
-#endif
-	template<typename T>
 	struct FFT{
 		const lf pi=3.141592653589793;
 		const lf pi2=6.283185307179586;
@@ -112,7 +98,8 @@ namespace Transform{
 					}
 				}
 			}
-			if(flag==-1) for(int i=0;i<len;i++) fft_a[i]/=len;
+			lf inv=1/len;
+			if(flag==-1) for(int i=0;i<len;i++) fft_a[i]*=inv;
 		}
 		void Init(int k){
 			rev.resize(1<<k,0);
@@ -124,6 +111,71 @@ namespace Transform{
 			for(int i=0;i<l;i++) if(i&(i-1)) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
 		}
 	};
+#else
+	struct Complex{
+		__m128d val;
+		Complex()=default;
+		Complex(const __m128d&x):val(x){}
+		Complex(lf x,lf y):val(_mm_set_pd(y,x)){}
+		template<class C>Complex(std::complex<C>x):val(_mm_set_pd(x.imag(),x.real())){}
+		Complex operator+(const Complex&x)const{return _mm_add_pd(val,x.val);}
+		Complex operator-(const Complex&x)const{return _mm_sub_pd(val,x.val);}
+		Complex operator*(const Complex&x)const{return _mm_fmaddsub_pd(_mm_unpacklo_pd(val,val),x.val,_mm_unpackhi_pd(val,val)*_mm_permute_pd(x.val,1));}
+		Complex& operator*=(const Complex&b){val=_mm_fmaddsub_pd(_mm_unpacklo_pd(val,val),b.val,_mm_unpackhi_pd(val,val)*_mm_permute_pd(b.val,1));return *this;}
+		Complex operator*(lf x)const{return _mm_mul_pd(val,_mm_set1_pd(x));}
+		Complex& operator*=(lf x){val=_mm_mul_pd(val,_mm_set1_pd(x));return *this;}
+		Complex operator+(lf x)const{return _mm_add_pd(val,_mm_set_pd(0.0,x));}
+		Complex conj()const{return Complex(_mm_xor_pd(val,_mm_set_pd(-0.0,0.0)));}
+		Complex operator-()const{return _mm_mul_pd(val,_mm_set1_pd(-1.0));}
+		lf real()const{return _mm_cvtsd_f64(val);}
+		lf imag()const{return _mm_cvtsd_f64(_mm_unpackhi_pd(val,val));}
+	};
+	struct FFT{
+		const lf pi=3.141592653589793;
+		const lf pi2=6.283185307179586;
+		std::vector<Complex>omega;
+		Complex calc(const Complex&a,const Complex&b){return _mm_fmadd_pd(_mm_unpacklo_pd(a.val,a.val),b.val,_mm_unpackhi_pd(a.val,a.val)*_mm_permute_pd(b.val,1));}
+		void init(int Len){
+			if(Len<=(int)omega.size()<<1) return;
+			int k=std::__lg(Len-1);
+			omega.resize(1<<k),omega[0]={1.0,0.0};Len=1<<k;
+			for(int i=1;i<Len;i<<=1) omega[i]=std::polar(1.0,pi/(i<<1));
+			for(int i=1;i<Len;i++) if(i&(i-1)) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
+		}
+		void dif(std::vector<Complex>&a){
+			int len=a.size();
+			for(int Len=len>>1,sp=len;Len;sp=Len,Len>>=1){
+				for(int i=0;i<Len;i++){auto temp=a[i];a[i]=temp+a[i+Len],a[i+Len]=temp-a[i+Len];}
+				for(int blk=sp,o=1;blk<len;blk+=sp,o++){
+					for(int i=blk;i<blk+Len;i++){auto t1=a[i],t2=a[Len+i]*omega[o];a[i]=t1+t2,a[Len+i]=t1-t2;}
+				}
+			}
+		}
+		void dit(std::vector<Complex>&a){
+			int len=a.size();
+			for(int Len=1,sp=2;Len!=len;Len=sp,sp<<=1){
+				for(int i=0;i<Len;i++){auto temp=a[i];a[i]=temp+a[i+Len],a[i+Len]=temp-a[i+Len];}
+				for(int blk=sp,o=1;blk<len;blk+=sp,o++){
+					for(int i=blk;i<blk+Len;i++){auto t1=a[i],t2=a[Len+i];a[i]=t1+t2,a[Len+i]=(t1-t2)*omega[o].conj();}
+				}
+			}
+		}
+		void mul(std::vector<Complex>&F,std::vector<Complex>&G){//F,G must be resized
+			int len=F.size();
+			lf inv=1.0/len,_2=inv*0.25;
+			F[0]=calc(F[0],G[0])*inv;
+			F[1]=F[1]*G[1]*inv;
+			for(int st=2,ed=3;st<len;st<<=1,ed<<=1){
+				for(int i=st,j=i+st-1;i<ed;i++,j--){
+					Complex oi=(F[i]+F[j].conj()),hi=(F[i]-F[j].conj());
+					Complex Oi=(G[i]+G[j].conj()),Hi=(G[i]-G[j].conj());
+					Complex A=oi*Oi-hi*Hi*((i&1)?-omega[i>>1]:omega[i>>1]),B=Oi*hi+oi*Hi;
+					F[i]=(A+B)*_2,F[j]=(A-B).conj()*_2;
+				}
+			}
+		}
+	};
+#endif
 }
 
 namespace IO{
@@ -457,13 +509,16 @@ public:
 		UnsignedBigInt c(*this);c*=b;
 		return c;
 	}
-	UnsignedBigInt& operator*=(const UnsignedBigInt&b){//https://judge.yosupo.jp/submission/341166
+	UnsignedBigInt& operator*=(const UnsignedBigInt&b){
+		//https://judge.yosupo.jp/submission/341166
 		if(len<=(int)T||b.len<=(int)T){Mul(b);return *this;}
 		int k=1,Len=2,n=len,m=b.len;
 		while((1<<k)<n+m) k++,Len<<=1;
+		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
+#ifndef __AVX2__
 		Len<<=1,k++;
 		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-		Transform::FFT<lf>FFT_a,FFT_b;FFT_a.init(Len+1),FFT_b.init(Len+1);
+		Transform::FFT FFT_a,FFT_b;FFT_a.init(Len+1),FFT_b.init(Len+1);
 		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1]={(lf)(num[i]%FFT_BASE),0.0},FFT_a.fft_a[i<<1|1]={(lf)(num[i]/FFT_BASE),0.0};
 		for(int i=0;i<b.len;i++) FFT_b.fft_a[i<<1]={(lf)(b.num[i]%FFT_BASE),0.0},FFT_b.fft_a[i<<1|1]={(lf)(b.num[i]/FFT_BASE),0.0};
 		FFT_a.Init(k),FFT_b.Init(k);
@@ -484,6 +539,27 @@ public:
 		len=(Len>>1)+1;
 		while(len>1&&!num[len-1]) len--;
 		return *this;
+#else
+		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
+		Transform::FFT H;H.init(Len);
+		std::vector<Transform::Complex>F(len),G(b.len);
+		for(int i=0;i<len;i++) F[i]={(lf)(num[i]%FFT_BASE),(lf)(num[i]/FFT_BASE)};
+		for(int i=0;i<b.len;i++) G[i]={(lf)(b.num[i]%FFT_BASE),(lf)(b.num[i]/FFT_BASE)};
+		F.resize(Len),G.resize(Len);
+		H.dif(F),H.dif(G);H.mul(F,G);H.dit(F);
+		Expand(Len);
+		std::fill(num.get(),num.get()+len,0);
+		for(int i=0;i<Len;i++){
+			__uint128_t t=(ull)(F[i].imag()+0.5)*FFT_BASE+(ull)(F[i].real()+0.5);
+			num[i]+=t%BASE;
+			num[i+1]+=num[i]/BASE;
+			num[i]%=BASE;
+			num[i+1]+=t/BASE;
+		}
+		len=Len+1;
+		while(len>1&&!num[len-1]) len--;
+		return *this;
+#endif
 	}
 	UnsignedBigInt& operator/=(const UnsignedBigInt&b){*this=Mod(b).first;return *this;}
 	UnsignedBigInt operator/(const UnsignedBigInt&b)const{return Mod(b).first;}
@@ -602,7 +678,8 @@ public:
 		while((1<<k)<(n<<1)) k++,Len<<=1;
 		Len<<=1,k++;
 		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-		Transform::FFT<lf>FFT_a;FFT_a.init(Len+1);
+#ifndef __AVX2__
+		Transform::FFT FFT_a;FFT_a.init(Len+1);
 		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1]={(lf)(num[i]%FFT_BASE),0.0},FFT_a.fft_a[i<<1|1]={(lf)(num[i]/FFT_BASE),0.0};
 		FFT_a.Init(k);
 		FFT_a.fft(1,Len);
@@ -620,6 +697,9 @@ public:
 		}
 		len=(Len>>1)+1;
 		while(len>1&&!num[len-1]) len--;
+#else
+		*this*=*this;
+#endif
 	}
 	UnsignedBigInt Square()const{
 		UnsignedBigInt res(*this);
