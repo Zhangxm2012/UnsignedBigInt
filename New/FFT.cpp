@@ -1,69 +1,29 @@
 #pragma GCC target("fma")
-#include<bits/stdc++.h>
-#include<immintrin.h>
+#include<vector>
+#include<stdexcept>
+#include<cmath>
 #include<memory>
+#include<cstring>
+#include<iostream>
+#include<string>
+#include<climits>
+#include<immintrin.h>
+#include<complex>
+#include<random>
+#include<algorithm>
 #define lf double
+#define ull unsigned long long
 #define ll long long
+#define u32 unsigned
+#define int128 __int128_t
 #define __AVX2__ 1
-namespace Transform{
-#ifndef __AVX2__
-	template<typename T>
-	struct fComplex{
-		T rez,imz;
-		fComplex(){rez=0.0,imz=0.0;}
-		fComplex(T x,T y){rez=x,imz=y;}
-		template<class C>fComplex(std::complex<C>x):rez(x.real()),imz(x.imag()){}
-		fComplex operator+(const fComplex&b)const{return {rez+b.rez,imz+b.imz};}
-		fComplex operator-(const fComplex&b)const{return {rez-b.rez,imz-b.imz};}
-		fComplex operator*(const fComplex&b)const{return {rez*b.rez-imz*b.imz,rez*b.imz+imz*b.rez};}
-		fComplex& operator*=(const fComplex&b){*this=*this*b;return *this;}
-		fComplex& operator*(const T&b){return {rez*b,imz*b};}
-		fComplex& operator*=(const T&b){rez*=b,imz*=b;return *this;}
-		fComplex operator+(const T&x)const{return rez+=x;}
-		fComplex conj()const{return {rez,-imz};}
-		T real()const{return rez;}
-		T imag()const{return imz;}
-	};
-	using Complex=fComplex<lf>;
-	struct FFT{
-		const lf pi=3.141592653589793;
-		const lf pi2=6.283185307179586;
-		std::vector<Complex>fft_a;
-		void init(int len){fft_a.resize(len);}
-		std::vector<int>rev;std::vector<Complex>omega;
-		void fft(int flag,int len){
-			for(int i=0;i<len;i++){
-				if(i<rev[i]) std::swap(fft_a[i],fft_a[rev[i]]);
-			}
-			for(int i=2;i<=len;i<<=1){
-				int t=len/i;
-				for(int j=0;j<len;j+=i){
-					for(int k=0;k<i/2;k++){
-						int idx=k*t;
-						if(flag<0) idx=len-idx;
-						if(idx>=len) idx-=len;
-						Complex w=omega[idx];
-						Complex x=fft_a[j+k];
-						Complex y=w*fft_a[j+k+i/2];
-						fft_a[j+k]=x+y;
-						fft_a[j+k+i/2]=x-y;
-					}
-				}
-			}
-			lf inv=1/len;
-			if(flag==-1) for(int i=0;i<len;i++) fft_a[i]*=inv;
-		}
-		void Init(int k){
-			rev.resize(1<<k,0);
-			int l=1<<k;
-			for(int i=0;i<l;i++) rev[i]=(rev[i>>1]>>1)|((i&1)<<(k-1));
-			omega.clear(),omega.resize(l,{0.0,0.0});
-			omega[0]={1.0,0.0};
-			for(int i=1;i<l;i<<=1) omega[i]={cos(pi2*i/l),sin(pi2*i/l)};
-			for(int i=0;i<l;i++) if(i&(i-1)) omega[i]=omega[i&(-i)]*omega[i&(i-1)];
-		}
-	};
+#ifdef SIZE
+#define LENGTH SIZE
 #else
+#define LENGTH 2000004
+#endif
+
+namespace Transform{
 	struct Complex{
 		__m128d val;
 		Complex()=default;
@@ -112,7 +72,7 @@ namespace Transform{
 				}
 			}
 		}
-		void mul(std::vector<Complex>&F,std::vector<Complex>&G){//F,G must be resized
+		void mul(std::vector<Complex>&F,std::vector<Complex>&G){
 			int len=F.size();
 			lf inv=1.0/len,_2=inv*0.25;
 			F[0]=calc(F[0],G[0])*inv;
@@ -127,5 +87,26 @@ namespace Transform{
 			}
 		}
 	};
-#endif
+}
+
+using Transform::Complex;
+using Transform::FFT;
+using namespace std;
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(0);
+	cout.tie(0);
+    int n,m;cin>>n>>m;
+    int len=1;
+    while(len<=n+m) len<<=1;
+    vector<Complex>F(len);
+    for(int i=0;i<=n;i++){int x;cin>>x;F[i]=Complex(x,0);}
+    for(int i=0;i<=m;i++){int x;cin>>x;F[i]=Complex(F[i].real(),x);}
+    FFT fft;fft.init(len);
+    fft.dif(F);
+    fft.mul(F,F);
+    fft.dit(F);
+	// __bit_ceil
+    for(int i=0;i<=n+m;i++) cout<<(int)(F[i].imag()/2+0.5)<<' ';
+    return 0;
 }

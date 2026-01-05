@@ -20,7 +20,7 @@
 #ifdef SIZE
 #define LENGTH SIZE
 #else
-#define LENGTH 2000004
+#define LENGTH 4000004
 #endif
 namespace ERROR{
 	class Exception:public std::exception{
@@ -160,7 +160,7 @@ namespace Transform{
 				}
 			}
 		}
-		void mul(std::vector<Complex>&F,std::vector<Complex>&G){//F,G must be resized
+		void mul(std::vector<Complex>&F,std::vector<Complex>&G){
 			int len=F.size();
 			lf inv=1.0/len,_2=inv*0.25;
 			F[0]=calc(F[0],G[0])*inv;
@@ -323,6 +323,7 @@ private:
 		return --res;
 	}
 	std::pair<UnsignedBigInt,UnsignedBigInt> Mod(const UnsignedBigInt&b)const{
+		//https://judge.yosupo.jp/submission/343251
 		if(*this<b) return std::make_pair(0,*this);
 		if(len<=(int)T||b.len<=(int)T) return Simple_Mod(b);
 		int Len=len-b.len+5,cnt=Len>b.len?0:b.len-Len;
@@ -510,12 +511,31 @@ public:
 		return c;
 	}
 	UnsignedBigInt& operator*=(const UnsignedBigInt&b){
-		//https://judge.yosupo.jp/submission/341166
+		//https://judge.yosupo.jp/submission/343248
 		if(len<=(int)T||b.len<=(int)T){Mul(b);return *this;}
+#ifdef __AVX2__
+		int _len=len+b.len,Len=2<<std::__lg(_len-1);
+		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
+		Transform::FFT H;
+		std::vector<Transform::Complex>F(Len,{0.0,0.0}),G(Len,{0.0,0.0});
+		for(int i=0;i<len;i++) F[i]={(lf)(num[i]%FFT_BASE),(lf)(num[i]/FFT_BASE)};
+		for(int i=0;i<b.len;i++) G[i]={(lf)(b.num[i]%FFT_BASE),(lf)(b.num[i]/FFT_BASE)};
+		H.init(Len);H.dif(F),H.dif(G),H.mul(F,G),H.dit(F);
+		std::fill(num.get(),num.get()+len,0);
+		Expand(_len);len=_len;
+		ull carry=0;
+		for(int i=0;i<_len;i++){
+			carry+=(ull)((ull)(F[i].real()+0.5)+(ull)(F[i].imag()+0.5)*FFT_BASE);
+			num[i]=carry%BASE,carry/=BASE;
+		}
+		for(;carry&&Max>len;num[len++]=carry%BASE,carry/=BASE){
+			if(len==Max) Expand(Max<<1);
+		}
+		while(len>1&&!num[len-1]) len--;
+		return *this;
+#else
 		int k=1,Len=2,n=len,m=b.len;
 		while((1<<k)<n+m) k++,Len<<=1;
-		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-#ifndef __AVX2__
 		Len<<=1,k++;
 		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
 		Transform::FFT FFT_a,FFT_b;FFT_a.init(Len+1),FFT_b.init(Len+1);
@@ -537,26 +557,6 @@ public:
 			num[idx+1]+=t/BASE;
 		}
 		len=(Len>>1)+1;
-		while(len>1&&!num[len-1]) len--;
-		return *this;
-#else
-		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-		Transform::FFT H;H.init(Len);
-		std::vector<Transform::Complex>F(len),G(b.len);
-		for(int i=0;i<len;i++) F[i]={(lf)(num[i]%FFT_BASE),(lf)(num[i]/FFT_BASE)};
-		for(int i=0;i<b.len;i++) G[i]={(lf)(b.num[i]%FFT_BASE),(lf)(b.num[i]/FFT_BASE)};
-		F.resize(Len),G.resize(Len);
-		H.dif(F),H.dif(G);H.mul(F,G);H.dit(F);
-		Expand(Len);
-		std::fill(num.get(),num.get()+len,0);
-		for(int i=0;i<Len;i++){
-			__uint128_t t=(ull)(F[i].imag()+0.5)*FFT_BASE+(ull)(F[i].real()+0.5);
-			num[i]+=t%BASE;
-			num[i+1]+=num[i]/BASE;
-			num[i]%=BASE;
-			num[i+1]+=t/BASE;
-		}
-		len=Len+1;
 		while(len>1&&!num[len-1]) len--;
 		return *this;
 #endif
@@ -601,7 +601,7 @@ public:
 	UnsignedBigInt operator%(const ull&b)const{UnsignedBigInt res(*this);res%=b;return res;}
 	UnsignedBigInt& operator<<=(const ull&b){
 		UnsignedBigInt base("2");ull p=b;
-		for(;p;p>>=1,base.Square()) if(p&1) *this*=base;
+		for(;p;p>>=1,base.square()) if(p&1) *this*=base;
 		return *this;
 	}
 	UnsignedBigInt& operator>>=(const ull&b){
@@ -627,7 +627,7 @@ public:
 		UnsignedBigInt res("1"),t(*this);ull p=b;
 		for(;p;p>>=1){
 			if(p&1) res*=t;
-			if(p>1) t.Square();
+			if(p>1) t.square();
 		}
 		return res;
 	}
@@ -665,20 +665,19 @@ public:
 		while(xx<x) std::swap(x,xx),xx=(x+*this/x)/2;
 		return x;
 	}
+	bool True()const{return !is_zero();}
 	operator std::string()const{
 		std::string s="";s+=std::to_string(num[len-1]);
 		for(int i=len-2;i>=0;i--){char buf[10];sprintf(buf,"%08llu",num[i]);s+=buf;}
 		return s;
 	}
-	bool True()const{return !is_zero();}
-	void test()const{std::cout<<LENGTH<<'\n';}
 	void square(){
 		if(len<=(int)T){Mul(*this);return;}
+#ifndef __AVX2__
 		int k=1,Len=2,n=len;
 		while((1<<k)<(n<<1)) k++,Len<<=1;
 		Len<<=1,k++;
 		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
-#ifndef __AVX2__
 		Transform::FFT FFT_a;FFT_a.init(Len+1);
 		for(int i=0;i<len;i++) FFT_a.fft_a[i<<1]={(lf)(num[i]%FFT_BASE),0.0},FFT_a.fft_a[i<<1|1]={(lf)(num[i]/FFT_BASE),0.0};
 		FFT_a.Init(k);
@@ -698,7 +697,23 @@ public:
 		len=(Len>>1)+1;
 		while(len>1&&!num[len-1]) len--;
 #else
-		*this*=*this;
+		int _len=len+len,Len=2<<std::__lg(_len-1);
+		if(Len>LENGTH) throw ERROR::MLE("FFT Length");
+		Transform::FFT H;
+		std::vector<Transform::Complex>F(Len,{0.0,0.0});
+		for(int i=0;i<len;i++) F[i]={(lf)(num[i]%FFT_BASE),(lf)(num[i]/FFT_BASE)};
+		H.init(Len);H.dif(F),H.mul(F,F),H.dit(F);
+		std::fill(num.get(),num.get()+len,0);
+		Expand(_len);len=_len;
+		ull carry=0;
+		for(int i=0;i<_len;i++){
+			carry+=(ull)((ull)(F[i].real()+0.5)+(ull)(F[i].imag()+0.5)*FFT_BASE);
+			num[i]=carry%BASE,carry/=BASE;
+		}
+		for(;carry&&Max>len;num[len++]=carry%BASE,carry/=BASE){
+			if(len==Max) Expand(Max<<1);
+		}
+		while(len>1&&!num[len-1]) len--;
 #endif
 	}
 	UnsignedBigInt Square()const{
@@ -716,7 +731,7 @@ namespace Operation{
 		UnsignedBigInt res("1"),t(a);
 		for(;p;p>>=1){
 			if(p&1) res*=t;
-			if(p>1) t.Square();
+			if(p>1) t.square();
 		}
 		return res;
 	}
@@ -728,7 +743,7 @@ namespace Operation{
 		UnsignedBigInt res("1");
 		for(;p;p>>=1){
 			if(p&1) res*=t,res%=Mod;
-			if(p>1) t.Square(),t%=Mod;
+			if(p>1) t.square(),t%=Mod;
 		}
 		return res%Mod;
 	}
