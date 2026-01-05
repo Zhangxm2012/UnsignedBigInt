@@ -268,6 +268,7 @@ private:
 		if(*this==b) return std::make_pair(1,0);
 		if(b.len<=2){ull q=b.num[0]+b.num[1]*BASE;return std::make_pair(*this/q,*this%q);}
 		UnsignedBigInt Q,R(*this);Q.Expand(len-b.len+1),Q.len=len-b.len+1;
+		ull b_Get=Get(b,b.len-1)+1;
 		for(int i=len-b.len;i>=0;i--){
 			ull q=0;
 			auto Sub=[&](){
@@ -280,7 +281,7 @@ private:
 				if(t) R.num[i+b.len]+=(ull)(t);
 				Q.num[i]+=q;
 			};
-			while((q=Get(R,i+b.len-1)/(Get(b,b.len-1)+1))) Sub();
+			while((q=Get(R,i+b.len-1)/b_Get)) Sub();
 			q=1;
 			for(int j=b.len-1;j>=0;j--){if(R.num[j+i]!=b.num[j]&&(q=b.num[j]<R.num[i+j],true)) break;}
 			if(q) Sub();
